@@ -1,13 +1,15 @@
+
+Docker compose · YML
 services:
   # ─── MySQL Database ─────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: library-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: librarymanagement
-      MYSQL_USER: library_user
-      MYSQL_PASSWORD: library_pass123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-librarymanagement}
+      MYSQL_USER: ${MYSQL_USER:-library_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "3307:3306"
     volumes:
@@ -21,26 +23,26 @@ services:
       retries: 10
       interval: 10s
     command: --default-authentication-plugin=mysql_native_password
-
+ 
   # ─── Redis Cache ────────────────────────────────
   redis:
     image: redis:7.2-alpine
     container_name: library-redis
     environment:
-      REDIS_PASSWORD: redis_pass123
+      REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD}
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
       - library-network
-    command: redis-server --requirepass redis_pass123 --appendonly yes
+    command: redis-server --requirepass ${LOCAL_REDIS_PASSWORD} --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       timeout: 10s
       retries: 10
       interval: 5s
-
+ 
   # ─── MailHog (Fake SMTP for local dev) ──────────
   mailhog:
     image: mailhog/mailhog:latest
@@ -50,13 +52,13 @@ services:
       - "8025:8025"
     networks:
       - library-network
-
+ 
   # ─── Redis Commander (Optional: Redis UI) ──────
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: library-redis-commander
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:redis_pass123
+      - REDIS_HOSTS=local:redis:6379:0:${LOCAL_REDIS_PASSWORD}
     ports:
       - "8081:8081"
     networks:
@@ -65,7 +67,7 @@ services:
       - redis
     profiles:
       - tools
-
+ 
   # ─── PhpMyAdmin (Optional: MySQL UI) ────────────
   phpmyadmin:
     image: phpmyadmin:5.2-apache
@@ -74,7 +76,7 @@ services:
       PMA_HOST: mysql
       PMA_PORT: 3306
       PMA_USER: root
-      PMA_PASSWORD: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
       - "8082:80"
     networks:
@@ -83,7 +85,7 @@ services:
       - mysql
     profiles:
       - tools
-
+ 
   # ─── Spring Boot Application ─────────────────────
   app:
     build:
@@ -92,22 +94,22 @@ services:
     container_name: library-app
     environment:
       SPRING_APPLICATION_NAME: LibraryManagementSystem
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/librarymanagement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-librarymanagement}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: 'false'
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: '6379'
-      SPRING_DATA_REDIS_PASSWORD: redis_pass123
+      SPRING_DATA_REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD}
       SPRING_CACHE_TYPE: redis
       SPRING_CACHE_REDIS_TIME_TO_LIVE: '600000'
       SERVER_PORT: '8080'
       LOGGING_LEVEL_ROOT: INFO
       LOGGING_LEVEL_ORG_EXAMPLE_LIBRARYMANAGEMENTSYSTEM: DEBUG
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: INFO
-      JWT_SECRET: LibraryManagementSystemSecretKey2026!!
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: '3600000'
       JWT_REFRESH_EXPIRATION: '604800000'
       JWT_PREFIX: Bearer
@@ -136,13 +138,14 @@ services:
       timeout: 10s
       retries: 10
       interval: 10s
-
+ 
 networks:
   library-network:
     driver: bridge
-
+ 
 volumes:
   mysql-data:
     driver: local
   redis-data:
     driver: local
+ 
