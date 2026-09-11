@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+<h2>Daily Library Report</h2>
+<p>Report date: <span th:text="${reportDate}">2026-01-01</span></p>
+<ul>
+    <li>Total Books: <span th:text="${totalBooks}">0</span></li>
+    <li>Active Members: <span th:text="${activeMembers}">0</span></li>
+    <li>Overdue Books: <span th:text="${overdueCount}">0</span></li>
+</ul>
+</body>
+</html>

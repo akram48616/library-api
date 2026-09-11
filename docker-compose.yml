@@ -1,0 +1,148 @@
+services:
+  # ─── MySQL Database ─────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: library-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: librarymanagement
+      MYSQL_USER: library_user
+      MYSQL_PASSWORD: library_pass123
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - library-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+    command: --default-authentication-plugin=mysql_native_password
+
+  # ─── Redis Cache ────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: library-redis
+    environment:
+      REDIS_PASSWORD: redis_pass123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - library-network
+    command: redis-server --requirepass redis_pass123 --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 10s
+      retries: 10
+      interval: 5s
+
+  # ─── MailHog (Fake SMTP for local dev) ──────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: library-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - library-network
+
+  # ─── Redis Commander (Optional: Redis UI) ──────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: library-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:redis_pass123
+    ports:
+      - "8081:8081"
+    networks:
+      - library-network
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+  # ─── PhpMyAdmin (Optional: MySQL UI) ────────────
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    container_name: library-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8082:80"
+    networks:
+      - library-network
+    depends_on:
+      - mysql
+    profiles:
+      - tools
+
+  # ─── Spring Boot Application ─────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: library-app
+    environment:
+      SPRING_APPLICATION_NAME: LibraryManagementSystem
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/librarymanagement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: 'false'
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: '6379'
+      SPRING_DATA_REDIS_PASSWORD: redis_pass123
+      SPRING_CACHE_TYPE: redis
+      SPRING_CACHE_REDIS_TIME_TO_LIVE: '600000'
+      SERVER_PORT: '8080'
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_ORG_EXAMPLE_LIBRARYMANAGEMENTSYSTEM: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: INFO
+      JWT_SECRET: LibraryManagementSystemSecretKey2026!!
+      JWT_EXPIRATION: '3600000'
+      JWT_REFRESH_EXPIRATION: '604800000'
+      JWT_PREFIX: Bearer
+      JWT_HEADER: Authorization
+      # ─── Mail Configuration ────────────────────
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: '1025'
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: 'false'
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: 'false'
+    ports:
+      - "8080:8080"
+    networks:
+      - library-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      timeout: 10s
+      retries: 10
+      interval: 10s
+
+networks:
+  library-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
